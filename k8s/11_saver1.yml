@@ -1,0 +1,26 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: twitter-saver-devops-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: twitter-saver-devops
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7071"
+    spec:
+      containers:
+      - name: twitter-saver-devops
+        image: maxwo/twitter-saver:0.1.0-SNAPSHOT
+        env:
+          - name: TWITTER_TAG
+            value: "devops"
+        livenessProbe:
+          httpGet:
+            path: /info
+            port: 8080
+          initialDelaySeconds: 120
+          timeoutSeconds: 120

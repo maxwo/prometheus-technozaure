@@ -1,0 +1,42 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-stateful-set
+spec:
+  serviceName: "kafka"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7071"
+    spec:
+      containers:
+      - name: kafka-member
+        image: maxwo/kafka:1.0.0
+        env:
+          - name: ZOOKEEPER_CONNECT
+            value: "zookeeper:2181"
+          - name: KAFKA_HEAP_OPTS
+            value: -Xmx512m -Xms512m
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: kafka-1
+spec:
+  ports:
+  - name: client
+    port: 9092
+    protocol: TCP
+  selector:
+    app: kafka

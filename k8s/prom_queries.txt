@@ -1,0 +1,3 @@
+sort_desc(sum by (type) (irate(tweet_messages_word_count_total{word=""}[10m])))
+sort_desc(sum by (type, word) (irate(tweet_messages_word_count_total{word!=""}[10m])))
+tweet_messages_word_count_total

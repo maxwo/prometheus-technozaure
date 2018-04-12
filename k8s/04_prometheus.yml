@@ -1,0 +1,264 @@
+---
+apiVersion: v1
+kind: ConfigMap
+data:
+  prometheus.yml: |
+
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+
+    rule_files:
+      - '/etc/prometheus/alerts.yml'
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          action: replace
+          target_label: kubernetes_pod_name
+
+
+  alerts.yml: |
+
+    groups:
+    - name: technozaure
+      rules:
+
+      - alert: ServiceIsDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: "critical"
+        annotations:
+          description: "Service {{ $labels.app }} on {{ $labels.instance }} is down"
+          description: "A service is down."
+
+      - alert: DiskWillBeFullIn4Hours
+        expr: predict_linear(node_filesystem_free{device=~"/dev/sd.*"}[1h], 4 * 3600) <= 0
+        for: 5m
+        labels:
+          severity: "warning"
+          type: "infrastructure"
+        annotations:
+          description: "Device {{$labels.device}} will be full in 4 hours or less"
+          description: "A device is about to be full."
+
+      - alert: KafkaGroupConsumerIsLagging
+        expr: sum by (group, topic) (kafka_consumer_group_lag) > 0
+        for: 30s
+        labels:
+          severity: "warning"
+          type: "middleware"
+          middleware: "kafka"
+        annotations:
+          description: "Consumer group {{$labels.group}} is lagging while consuming {{$labels.topic}}"
+          description: "A Kafka consumer group is lagging."
+
+      - alert: SpringChannelIsErroring
+        expr: 100 * sum by (app, channel) (increase(spring_channel_messages_total{type="SendError"}[10m])) / sum by (job, channel) (increase(spring_channel_messages_total{type="Send"}[10m])) > 0
+        for: 30s
+        labels:
+          severity: "critical"
+          type: "business"
+        annotations:
+          description: "Spring channel {{ $labels.channel }} on {{ $labels.app }} has a {{ $value | humanize }}% error rate"
+          description: "A Spring channel has more than 0% error rate."
+
+      - alert: SpringAPIEndpointIsErroring
+        expr: 100 * sum by (app, route) (spring_http_requests_total{status=~"2.."}) / sum by (app, route) (spring_http_requests_total) < 99.5
+        for: 5m
+        labels:
+          severity: "warning"
+          type: "business"
+        annotations:
+          description: "Spring route {{ $labels.route }} on {{ $labels.app }} has a {{ $value | humanize }}% error rate"
+          description: "A Spring route has less than than 99.5% success rate."
+
+
+metadata:
+  name: prometheus-config
+  namespace: default
+  selfLink: /api/v1/namespaces/default/configmaps/prometheus-config
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus-server
+        image: prom/prometheus:v2.2.1
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+        ports:
+        - name: web
+          containerPort: 9090
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus-1
+spec:
+  ports:
+  - name: client
+    port: 9090
+    protocol: TCP
+  selector:
+    app: prometheus
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+ name: prometheus-ui
+ annotations:
+   kubernetes.io/ingress.class: traefik
+spec:
+ rules:
+ - host: "prometheus.zenikube.local"
+   http:
+     paths:
+     - backend:
+         serviceName: prometheus
+         servicePort: 9090
+
+---
+apiVersion: v1
+kind: ConfigMap
+data:
+  alertmanager.yml: |
+
+    global:
+      slack_api_url: 'https://hooks.slack.com/services/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'
+
+    route:
+      receiver: 'slack-notifications'
+      group_by: [alertname, datacenter, app]
+
+    receivers:
+    - name: 'slack-notifications'
+      slack_configs:
+      - channel: '#alerts'
+        text: 'http://www.zenika.com/'
+
+
+metadata:
+  name: alertmanager-config
+  namespace: default
+  selfLink: /api/v1/namespaces/default/configmaps/alertmanager-config
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: alertmanager-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.14.0
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+        ports:
+        - name: web
+          containerPort: 9093
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/alertmanager
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9093
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+      volumes:
+      - name: config-volume
+        configMap:
+          name: alertmanager-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  labels:
+    app: alertmanager-1
+spec:
+  ports:
+  - name: client
+    port: 9093
+    protocol: TCP
+  selector:
+    app: alertmanager
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+ name: alertmanager-ui
+ annotations:
+   kubernetes.io/ingress.class: traefik
+spec:
+ rules:
+ - host: "alertmanager.zenikube.local"
+   http:
+     paths:
+     - backend:
+         serviceName: alertmanager
+         servicePort: 9093

@@ -1,0 +1,6 @@
+[template]
+src   = "server.properties.tmpl"
+dest  = "/etc/kafka/server.properties"
+keys = [
+        "/"
+]

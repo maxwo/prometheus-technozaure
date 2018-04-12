@@ -1,0 +1,28 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kafka-consumer-group-exporter-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer-group-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9208"
+    spec:
+      containers:
+        - name: kafka-consumer-group-exporter
+          image: braedon/prometheus-kafka-consumer-group-exporter:0.3.0
+          args:
+            - -b
+            - kafka:9092
+          ports:
+            - name: metrics
+              containerPort: 9208
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 9208
+            initialDelaySeconds: 30
+            timeoutSeconds: 30

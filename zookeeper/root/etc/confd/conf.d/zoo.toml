@@ -1,0 +1,6 @@
+[template]
+src   = "zoo.cfg.tmpl"
+dest  = "/zookeeper/conf/zoo.cfg"
+keys = [
+        "/"
+]

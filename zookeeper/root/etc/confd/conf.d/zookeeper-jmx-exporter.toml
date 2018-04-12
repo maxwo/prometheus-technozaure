@@ -1,0 +1,6 @@
+[template]
+src   = "zookeeper-jmx-exporter.yml.tmpl"
+dest  = "/zookeeper/conf/zookeeper-jmx-exporter.yml"
+keys = [
+        "/"
+]

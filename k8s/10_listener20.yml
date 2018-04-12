@@ -1,0 +1,30 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: twitter-listener-beer-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: twitter-listener-beer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7071"
+    spec:
+      containers:
+      - name: twitter-listener-beer
+        image: maxwo/twitter-listener:0.1.0-SNAPSHOT
+        env:
+          - name: TWITTER_ACCESS_KEY
+            value: ""
+          - name: TWITTER_SECRET_KEY
+            value: ""
+          - name: TWITTER_TAG
+            value: "beer"
+        livenessProbe:
+          httpGet:
+            path: /info
+            port: 8080
+          initialDelaySeconds: 120
+          timeoutSeconds: 120

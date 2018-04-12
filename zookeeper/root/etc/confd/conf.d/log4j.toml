@@ -1,0 +1,6 @@
+[template]
+src   = "log4j.properties.tmpl"
+dest  = "/zookeeper/conf/log4j.properties"
+keys = [
+        "/"
+]
